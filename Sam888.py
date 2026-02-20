@@ -3,6 +3,8 @@ from telethon.tl.functions.channels import JoinChannelRequest
 from telethon.tl import functions, types
 from telethon import TelegramClient, functions, types
 from telethon.sync import TelegramClient
+from telethon.tl.functions.channels import GetFullChannelRequest
+from telethon.tl.types import UserStatusOffline
 from datetime import datetime, date
 from pytz import timezone
 from pystyle import *
@@ -15,6 +17,7 @@ import socket
 import csv
 import os
 import sys
+import time
 
 class colors:
     HEADER = '\033[95m'
@@ -144,55 +147,58 @@ async def loginacc():
         print(f"File {phone_number_file} not found")
         return
 
+    session_dir = os.path.join(os.getcwd(), 'Session')
+    if not os.path.exists(session_dir):
+        os.makedirs(session_dir)
+
     for phone_number in phone_numbers_list:
-        session_dir = os.path.join(os.getcwd(), 'Session')
-        if not os.path.exists(session_dir):
-            os.makedirs(session_dir)
+        if not phone_number.strip():
+            continue
+        session_file = os.path.join(session_dir, f'{phone_number}.session')
+        client = TelegramClient(session_file, api_id, api_hash)
+        await client.connect()
 
-    client = TelegramClient(session_file, api_id, api_hash)
-    await client.connect()
+        try:
+            if not await client.is_user_authorized():
+                print(f"   Sending code request to {phone_number}")
+                await client.send_code_request(phone_number)
+                code = input('   Enter the code you received: ')
+                try:
+                    await client.sign_in(phone_number, code)
+                except SessionPasswordNeededError:
+                    while True:
+                        try:
+                            password = getpass.getpass(f'   ! Enter the Two-step verification password: ')
+                            await client.sign_in(password=password)
+                            break
+                        except Exception as e:
+                            print(f"   {colors.FAIL}Invalid password. Please try again.{colors.WHITE}")
 
-    try:
-        if not await client.is_user_authorized():
-            print(f"Sending code request to {phone_number}")
-            await client.send_code_request(phone_number)
-            code = input('   Enter the code you received: ')
-            try:
-                await client.sign_in(phone_number, code)
-            except SessionPasswordNeededError:
-                while True:
-                    try:
-                        password = getpass.getpass(f'{colors.WHITE} ! Enter the Two-step verification password: ')
-                        await client.sign_in(password=password)
-                        break
-                    except Exception as e:
-                        print(f"{colors.FAIL}Invalid password. Please try again.{colors.WHITE}")
-
-            except UserDeactivatedBanError:
-                print(f"{colors.FAIL}This account ({phone_number}) has been banned.{colors.WHITE}")
-                return
-            except UserDeactivatedError:
-                print(f"{colors.FAIL}This account ({phone_number}) has been deleted.{colors.WHITE}")
-                return
-            except Exception as e:
-                print(f"{colors.FAIL}The phone code entered was invalid{colors.WHITE}")
-                await client.disconnect()
-                return
-                sys.exit()
-        else:
+                except UserDeactivatedBanError:
+                    print(f"   {colors.FAIL}This account ({phone_number}) has been banned.{colors.WHITE}")
+                    continue
+                except UserDeactivatedError:
+                    print(f"   {colors.FAIL}This account ({phone_number}) has been deleted.{colors.WHITE}")
+                    continue
+                except Exception as e:
+                    print(f"   {colors.FAIL}The phone code entered was invalid: {str(e)}{colors.WHITE}")
+                    await client.disconnect()
+                    continue
+            
             me = await client.get_me()
-            print(f"{colors.OKGREEN}   User '{me.first_name} {me.last_name}' is logged in successfully.{colors.WHITE}")
+            if me:
+                print(f"{colors.OKGREEN}   User '{me.first_name if me.first_name else ''} {me.last_name if me.last_name else ''}' is logged in successfully.{colors.WHITE}")
 
-    except UserDeactivatedBanError:
-        print(f"{colors.FAIL}This account ({phone_number}) has been banned.{colors.WHITE}")
-    except UserDeactivatedError:
-        print(f"{colors.FAIL}This account ({phone_number}) has been deleted.{colors.WHITE}")
-    except Exception as e:
-        print(f"{colors.FAIL}An error occurred: {str(e)}{colors.WHITE}")
-    finally:
-        await client.disconnect()
+        except UserDeactivatedBanError:
+            print(f"   {colors.FAIL}This account ({phone_number}) has been banned.{colors.WHITE}")
+        except UserDeactivatedError:
+            print(f"   {colors.FAIL}This account ({phone_number}) has been deleted.{colors.WHITE}")
+        except Exception as e:
+            print(f"   {colors.FAIL}An error occurred for {phone_number}: {str(e)}{colors.WHITE}")
+        finally:
+            await client.disconnect()
 
-    sys.exit() 
+    print(f"{colors.OKGREEN}All accounts processed.{colors.WHITE}")
 
 async def check_spam_bot_messages():
     os.system('cls')
@@ -203,15 +209,10 @@ async def check_spam_bot_messages():
     config = configparser.ConfigParser()
     config.read('setting.ini')
 
-    api_id = config['Selllicense']['api_id']
-    api_hash = config['Selllicense']['api_hash']
+    api_id = config['SellLicense']['api']
+    api_hash = config['SellLicense']['hash']
     phone_file = os.path.join(os.getcwd(), 'Phone Number.txt')
     
-    session_file = os.path.join(session_dir, f'{phone_number}.session')
-
-    client = TelegramClient(session_file, api_id, api_hash)
-    await client.connect()
-
     try:
         with open(phone_file, 'r') as file:
             phone_numbers_list = file.read().splitlines()
@@ -223,48 +224,60 @@ async def check_spam_bot_messages():
         return
 
     for phone_number in phone_numbers_list:
+        if not phone_number.strip():
+            continue
         session_file = os.path.join(os.getcwd(), 'Session', f'{phone_number}.session')
         client = TelegramClient(session_file, api_id, api_hash)
-        await client.start()
+        
+        try:
+            await client.start()
 
-        spam_bot_dialog = None
-        async for dialog in client.iter_dialogs():
-            if dialog.name == 'SpamBot' or dialog.entity.username == 'SpamBot':
-                spam_bot_dialog = dialog
-                break
+            spam_bot_dialog = None
+            async for dialog in client.iter_dialogs():
+                if dialog.name == 'SpamBot' or (dialog.entity and hasattr(dialog.entity, 'username') and dialog.entity.username == 'SpamBot'):
+                    spam_bot_dialog = dialog
+                    break
 
-        if spam_bot_dialog:
-            print(f'{colors.OKBLUE}Sending /start command to @SpamBot{colors.ENDC}')
-            await client.send_message(spam_bot_dialog.id, '/start')
+            if spam_bot_dialog:
+                print(f'{colors.OKBLUE}[{phone_number}] Sending /start command to @SpamBot{colors.ENDC}')
+                await client.send_message(spam_bot_dialog.id, '/start')
 
-            # Wait a short period to allow the bot to respond
-            await asyncio.sleep(5)  # Adjust sleep time if needed
+                await asyncio.sleep(5) 
 
-            print(f'{colors.OKBLUE}Retrieving the latest response from @SpamBot{colors.ENDC}')
-            messages = await client.get_messages(spam_bot_dialog.id, limit=1)  # Retrieve the latest message
+                messages = await client.get_messages(spam_bot_dialog.id, limit=1)
 
-            if messages:
-                message = messages[0]  # Get the latest message
-                if message.text:
-                    print(f'{colors.OKGREEN}Message Text: {message.text}{colors.ENDC}')
+                if messages:
+                    message = messages[0]
+                    if message.text:
+                        print(f'{colors.OKGREEN}[{phone_number}] Message Text: {message.text}{colors.ENDC}')
+                else:
+                    print(f'{colors.FAIL}[{phone_number}] No messages found from @SpamBot{colors.ENDC}')
             else:
-                print(f'{colors.FAIL}No messages found from @SpamBot{colors.ENDC}')
-        else:
-            print(f'{colors.FAIL}No dialog found with @SpamBot{colors.ENDC}')
+                print(f'{colors.FAIL}[{phone_number}] No dialog found with @SpamBot{colors.ENDC}')
 
-        await client.disconnect()
+        except Exception as e:
+            print(f"{colors.FAIL}Error with {phone_number}: {str(e)}{colors.WHITE}")
+        finally:
+            await client.disconnect()
 
 async def scrape_member():
-    clr()
+    os.system('cls')
     banner()
     config = configparser.ConfigParser()
     config.read("setting.ini")
-    link1 = config['Groups']['from_group'].strip()
+    
+    api_id = config['SellLicense']['api']
+    api_hash = config['SellLicense']['hash']
+    
+    link1 = config['SellLicense'].get('from_group', '').strip()
+    if not link1:
+        link1 = input(f"{colors.WARNING}Enter Group/Channel link to scrape from: {colors.WHITE}")
+        
     phone_file = os.path.join(os.getcwd(), 'Phone Number.txt')
 
     try:
         with open(phone_file, 'r') as file:
-            phone_numbers_list = file.read().splitlines()
+            phone_numbers_list = [p for p in file.read().splitlines() if p.strip()]
             if not phone_numbers_list:
                 print(f"{colors.FAIL}No phone numbers found in {phone_file}{colors.WHITE}")
                 return
@@ -272,49 +285,56 @@ async def scrape_member():
         print(f"{colors.FAIL}File {phone_file} not found{colors.WHITE}")
         return
 
+    phone = phone_numbers_list[0]
     print(f"{colors.OKGREEN}Scraping all members with account: {colors.OKBLUE}'{phone}'{colors.ENDC}")
 
-    # Create client and connect manually to avoid auto-login prompt
-    client = TelegramClient(f"sessions/{phone}", API_ID, API_HASH)
-    client.connect()
+    session_file = os.path.join(os.getcwd(), 'Session', f'{phone}.session')
+    client = TelegramClient(session_file, api_id, api_hash)
+    await client.connect()
     
-    if not client.is_user_authorized():
+    if not await client.is_user_authorized():
         print(f"{colors.FAIL}❖ Error: Account {phone} not logged in. Please login first (Option 1){colors.ENDC}")
-        client.disconnect()
+        await client.disconnect()
         return
 
     try:
-        group = client.get_entity(link1)
-        channel_full_info = client(GetFullChannelRequest(group))
+        group = await client.get_entity(link1)
+        channel_full_info = await client(GetFullChannelRequest(group))
         total_members = channel_full_info.full_chat.participants_count
 
         count = 1
 
-        def write(group, member):
+        def write(group_title, member):
             nonlocal count
             username = member.username if member.username else ''
-            status = member.status.was_online if isinstance(member.status, UserStatusOffline) else type(member.status).__name__
-            writer.writerow([count, username, member.id, member.access_hash, member.first_name, group.title, status, 'All'])
+            status = 'offline'
+            if isinstance(member.status, UserStatusOffline):
+                status = member.status.was_online.strftime('%Y-%m-%d %H:%M:%S')
+            elif member.status:
+                status = type(member.status).__name__
+            
+            writer.writerow([count, username, member.id, member.access_hash, member.first_name, group_title, status, 'All'])
             count += 1
 
-        initialize_csv()
-        with open("data.csv", "a", encoding='UTF-8', newline='') as f:
+        with open("data.csv", "w", encoding='UTF-8', newline='') as f:
             writer = csv.writer(f, delimiter=",")
+            writer.writerow(['Index', 'Username', 'User ID', 'Access Hash', 'First Name', 'Group', 'Status', 'Type'])
+            
             try:
                 index = 0
-                for member in client.iter_participants(group, aggressive=True):
-                    print(f"\r{progress_bar(index + 1, total_members)}", end="")
-                    if index % 100 == 0:
-                        time.sleep(3)
+                async for member in client.iter_participants(group, aggressive=True):
+                    print(f"\rProgress: {index + 1}/{total_members}", end="")
+                    if index % 100 == 0 and index > 0:
+                        await asyncio.sleep(1)
                     if not member.bot:
-                        write(group, member)
+                        write(group.title if hasattr(group, 'title') else 'Unknown', member)
                     index += 1
             except Exception as e:
-                print(f"\n{colors.FAIL}Error occurred: {str(e)}. Check data.csv for scraped members.{colors.ENDC}")
+                print(f"\n{colors.FAIL}Error occurred during scraping: {str(e)}. Check data.csv for partial results.{colors.ENDC}")
 
         print(f"\n{colors.OKGREEN}Scraping complete! {count-1} users saved to data.csv.{colors.ENDC}")
     finally:
-        client.disconnect()
+        await client.disconnect()
 
 async def send_message_to_users():
     os.system('cls')
@@ -322,174 +342,13 @@ async def send_message_to_users():
     config = configparser.ConfigParser()
     config.read('setting.ini')
 
-    api_id = config['Selllicense']['api_id']
-    api_hash = config['Selllicense']['api_hash']
+    api_id = config['SellLicense']['api']
+    api_hash = config['SellLicense']['hash']
     phone_number_file = os.path.join(os.getcwd(), 'Phone Number.txt')
-    delay_chat_to_users = int(config['Selllicense']['delay_chat_to_users'])
-    limit_chat = int(config['Selllicense']['limit_chat'])
-    not_sending_file = os.path.join(os.getcwd(), 'not_sending.csv')
-    already_send_file = os.path.join(os.getcwd(), 'already_send.csv')
-    date_file = os.path.join(os.getcwd(), 'last_run_date.txt')
+    delay_chat_to_users = int(config['SellLicense']['delay_chat_to_users'])
+    limit_chat = int(config['SellLicense']['limit_chat'])
     image_message_file = os.path.join(os.getcwd(), 'image_message.csv')
-    continue_sending = config['Selllicense'].get('continue', 'No').strip().lower() == 'yes'
     
-    limit_phone_numbers = 1
-    
-    if not os.path.exists(phone_number_file):
-        with open(phone_number_file, 'w') as file:
-            file.write('')
-    
-    with open(phone_number_file, 'r') as file:
-        phone_numbers_list = file.read().splitlines()
-    
-    if not phone_numbers_list:
-        print(f"{colors.FAIL}No phone numbers found in {phone_number_file}{colors.WHITE}")
-        return
-    
-    if len(phone_numbers_list) > limit_phone_numbers:
-        print(f"{colors.FAIL}---> No more than {limit_phone_numbers} phone number(s) allowed.{colors.WHITE}")
-        print(f"{colors.FAIL}---> Contact the developer for more information.{colors.WHITE}")
-        return
-    
-    not_sending_users = set()
-    if os.path.exists(not_sending_file):
-        with open(not_sending_file, 'r', encoding='utf-8') as file:
-            reader = csv.reader(file)
-            not_sending_users = {row[0] for row in reader if row and len(row) > 0} 
-    
-    already_sent_users = set()
-    if os.path.exists(already_send_file):
-        with open(already_send_file, 'r', encoding='utf-8-sig') as file:
-            reader = csv.reader(file)
-            next(reader, None)  
-            for row in reader:
-                user_id = row[0].lstrip('\ufeff') 
-                already_sent_users.add(int(user_id))
-    
-    last_run_date = None
-    if os.path.exists(date_file):
-        with open(date_file, 'r') as file:
-            last_run_date = file.read().strip()
-
-    today_date = date.today().isoformat()
-    
-    if not continue_sending and last_run_date != today_date:
-        already_sent_users.clear()
-        with open(already_send_file, 'w', encoding='utf-8-sig') as file:
-            pass
-
-    if os.path.exists(already_send_file):
-        with open(already_send_file, 'r+', encoding='utf-8-sig', newline='') as file:
-            reader = csv.reader(file)
-            headers = next(reader, None)
-            if headers != ['User Id', "User Name", 'Message', 'Date Sent', 'Images Sent']:
-                file.seek(0)
-                writer = csv.writer(file)
-                writer.writerow(['User Id', "User Name", 'Message', 'Date Sent', 'Images Sent'])
-                file.writelines(file.readlines())
-
-    image_messages = []
-    if os.path.exists(image_message_file):
-        with open(image_message_file, 'r', encoding='utf-8') as file:
-            image_messages = [row[0] for row in csv.reader(file) if row]
-            
-    if len(image_messages) > 1:
-        print(f"{colors.FAIL}More than one image message, please use only 1 image only.{colors.WHITE}")
-        print(f"{colors.FAIL}---> Contact the developer for more information.{colors.WHITE}")
-        return
-    
-    flood_wait_count = 0  # Counter for FloodWaitError occurrences
-    max_flood_wait_errors = 5  # Maximum allowed FloodWaitError before termination
-
-    for phone_index, phone_number in enumerate(phone_numbers_list[:limit_phone_numbers], start=1):
-        session_file = os.path.join(os.getcwd(), 'Session', f'{phone_number}.session')
-        client = TelegramClient(session_file, api_id, api_hash)
-        
-        try:
-            await client.start()
-            
-            if not os.path.exists("message.txt"):
-                print(f"{colors.FAIL}message.txt not found!{colors.WHITE}")
-                return
-            
-            with open("message.txt", "r", encoding="utf-8") as file:
-                message_text = file.read().strip()
-            
-            if not message_text:
-                print(f"{colors.FAIL}Message file is empty!{colors.WHITE}")
-                return
-            
-            users = []
-            async for dialog in client.iter_dialogs():
-                if dialog.is_user and not dialog.entity.bot:
-                    users.append((dialog.id, dialog.name))
-            
-            if users:
-                print(f"\n     {colors.HEADER}Index: {phone_index} - {colors.OKBLUE}Detected {len(users)} users you have chatted with:{colors.WHITE}")
-                
-                for i, (user_id, name) in enumerate(users, start=1):
-                    print(f"{colors.WARNING}{i}. {colors.OKGREEN}{name}{colors.ENDC}  --  {colors.FAIL}(ID: {user_id}){colors.ENDC}")
-                
-                users_to_chat = [user for user in users if user[1] not in not_sending_users and user[0] not in already_sent_users]
-                users_to_chat = users_to_chat[:limit_chat]
-                print(f"\n{colors.WARNING}Limiting to chat with {len(users_to_chat)} users.{colors.WHITE}")
-                
-                for i, (user_id, name) in enumerate(users_to_chat, start=1):
-                    should_delay = True  # Flag to determine if delay should be applied
-                    try:
-                        if image_messages:
-                            await client.send_file(user_id, image_messages, caption=message_text)
-                            images_sent = ', '.join(image_messages) if image_messages else 'NONE'
-                        else:
-                            await client.send_message(user_id, message_text)
-                            images_sent = 'NONE'
-                        print(f"{colors.WARNING}{i}. {colors.OKGREEN}Message sent to {colors.FAIL}{name}{colors.ENDC}")
-                        already_sent_users.add(user_id) 
-                        with open(already_send_file, 'a', encoding='utf-8-sig', newline='') as file:
-                            writer = csv.writer(file)
-                            writer.writerow([user_id, name, message_text, datetime.now().strftime('%d-%b-%y %I:%M %p'), images_sent])
-                        flood_wait_count = 0  # Reset counter on successful send
-                    except (UserDeactivatedError, UserInvalidError) as e:
-                        print(f"{colors.FAIL}{i}. Skipped {colors.WARNING}{name}: Account deleted or invalid ({str(e)}){colors.WHITE}")
-                        not_sending_users.add(str(user_id))
-                        with open(not_sending_file, 'a', encoding='utf-8', newline='') as file: 
-                            writer = csv.writer(file)
-                            writer.writerow([user_id])
-                        should_delay = False  # Skip delay for deleted accounts
-                        flood_wait_count = 0  # Reset counter on deleted account
-                    except FloodWaitError as e:
-                        flood_wait_count += 1
-                        print(f"{colors.FAIL}{i}. Failed to send message to {colors.WARNING}{name}: Too many requests (FloodWaitError, attempt {flood_wait_count}/{max_flood_wait_errors}){colors.WHITE}")
-                        if flood_wait_count >= max_flood_wait_errors:
-                            print(f"{colors.FAIL} Please Check your account or go to check spam bot messages.{colors.WHITE}")
-                            await client.disconnect()
-                            return  # Exit the function, terminating the script
-                        await asyncio.sleep(e.seconds)  # Respect the flood wait time
-                        should_delay = False  # Skip additional delay after flood wait
-                    except RPCError as e:
-                        if "user was deleted" in str(e).lower():
-                            print(f"{colors.FAIL}{i}. Skipped {colors.WARNING}{name}: Account deleted ({str(e)}){colors.WHITE}")
-                            not_sending_users.add(str(user_id))
-                            with open(not_sending_file, 'a', encoding='utf-8', newline='') as file:
-                                writer = csv.writer(file)
-                                writer.writerow([user_id])
-                            should_delay = False  # Skip delay for deleted accounts
-                            flood_wait_count = 0  # Reset counter on deleted account
-                        else:
-                            print(f"{colors.FAIL}{i}. Failed to send message to {colors.WARNING}{name}: {str(e)}{colors.WHITE}")
-                    except Exception as e:
-                        print(f"{colors.FAIL}{i}. Failed to send message to {colors.WARNING}{name}: {str(e)}{colors.WHITE}")
-                    if should_delay:
-                        await asyncio.sleep(delay_chat_to_users)  # Apply delay only if should_delay is True
-            else:
-                print(f"{colors.FAIL}No previous chat users detected.{colors.WHITE}")
-        except Exception as e:
-            print(f"{colors.FAIL}An error occurred: {str(e)}{colors.WHITE}")
-        finally:
-            await client.disconnect()
-
-    with open(date_file, 'w') as file:
-        file.write(today_date)
 
 if __name__ == "__main__":
     main()
