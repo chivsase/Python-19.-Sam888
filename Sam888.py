@@ -21,6 +21,7 @@ import csv
 import os
 import sys
 import time
+import random
 from datetime import datetime, date
 from pytz import timezone
 from pystyle import *
@@ -365,7 +366,14 @@ async def send_message_to_username():
 
     api_id = config['SellLicense']['api']
     api_hash = config['SellLicense']['hash']
-    delay_chat = int(config['SellLicense']['delay_chat_to_users'])
+    delay_min = int(config['SellLicense']['delay_min'])
+    delay_max = int(config['SellLicense']['delay_max'])
+    
+    # Ensure max is not less than min to prevent crash
+    if delay_max < delay_min:
+        print(f"{Colors.WARNING}Warning: delay_max ({delay_max}) is less than delay_min ({delay_min}). Swapping them.{Colors.WHITE}")
+        delay_min, delay_max = delay_max, delay_min
+    
     limit_chat = int(config['SellLicense']['limit_chat'])
     
     phone_number_file = os.path.join(os.getcwd(), 'phone_number.txt')
@@ -445,8 +453,9 @@ async def send_message_to_username():
                     target_index += 1
                     
                     if target_index < len(targets) and sent_count < limit_chat:
-                        print(f"{Colors.WARNING}Waiting {delay_chat} seconds...{Colors.WHITE}")
-                        await asyncio.sleep(delay_chat)
+                        sleep_time = random.randint(delay_min, delay_max)
+                        print(f"{Colors.WARNING}Waiting {sleep_time} seconds (randomized)...{Colors.WHITE}")
+                        await asyncio.sleep(sleep_time)
                 
                 except FloodWaitError as e:
                     print(f"{Colors.WARNING}[{phone}] Flood wait for {e.seconds} seconds. Switching account.{Colors.WHITE}")
