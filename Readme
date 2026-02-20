@@ -1,0 +1,8 @@
+pyinstaller --onefile --hidden-import=inquirer --hidden-import=readchar --copy-metadata readchar .\TeleSMG_Production.py --icon .\image\TeleSMG_logo_for_Telegram_message_with_a_technology_theme.ico
+
+
+
+update: 
+-fix skip delay if the account delected
+-fix skip account if the account delected
+-Update max floorerror 5 time end tool 
