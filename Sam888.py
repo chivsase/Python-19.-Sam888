@@ -42,6 +42,7 @@ def banner():
         "{} |::.. . |              |::.. . |::.. . |::.. . | {}".format(colors.HEADER, colors.ENDC),
         "{} `-------'              `-------`-------`-------' {}".format(colors.OKBLUE, colors.ENDC),
         "{}{:^78}{}".format(colors.HEADER, "Sam888 Software by @ItKhmerSoftware", colors.ENDC),
+        "{}{:^78}{}".format(colors.HEADER, "Version: 1.0.0", colors.ENDC),
     ]
 
     for line in art_lines:
@@ -58,6 +59,7 @@ def bannerLoginAccounts():
         "{} |::.. . |                    |::.|:. |                                  {}".format(colors.HEADER, colors.ENDC),
         "{} `-------'                    `--- ---'                                  {}".format(colors.OKBLUE, colors.ENDC),
         "{}{:^78}{}".format(colors.HEADER, "Sam888 Software by @ItKhmerSoftware", colors.ENDC),
+        "{}{:^78}{}".format(colors.HEADER, "Version: 1.0.0", colors.ENDC),
     ]
     for line in art_lines:
         centered_line = center_text(line)
@@ -73,6 +75,7 @@ def bannerCheckSpamBotMessages():
         "{} |::.. . |                      |::.. . |                      {}".format(colors.HEADER, colors.ENDC),
         "{} `-------'                      `-------'                      {}".format(colors.OKBLUE, colors.ENDC),
         "{}{:^78}{}".format(colors.HEADER, "Sam888 Software by @ItKhmerSoftware", colors.ENDC),
+        "{}{:^78}{}".format(colors.HEADER, "Version: 1.0.0", colors.ENDC),
     ]
     for line in art_lines:
         centered_line = center_text(line)
@@ -88,32 +91,18 @@ def bannerSendMessage():
         "{} |::.. . |                 |::.|:. |                                     {}".format(colors.HEADER, colors.ENDC),        
         "{} `-------'                 `--- ---'                                     {}".format(colors.OKBLUE, colors.ENDC), 
         "{}{:^78}{}".format(colors.HEADER, "Sam888 Software by @ItKhmerSoftware", colors.ENDC),
+        "{}{:^78}{}".format(colors.HEADER, "Version: 1.0.0", colors.ENDC),
     ]
     for line in art_lines:
         centered_line = center_text(line)
         print(centered_line)
-        
-def header():
-    print(f'{colors.OKGREEN}This Script is officially activated to: {colors.FAIL}t.me/it_computer_khmer')
-    print(f'{colors.OKGREEN}        ')
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.connect(("8.8.8.8", 80))
-    print(f'{colors.OKGREEN}Your IP: {colors.FAIL}{str(s.getsockname()[0])}             {colors.OKGREEN}Version: {colors.FAIL}v1.3')
-    print(f'{colors.OKGREEN}Current Directory: {colors.FAIL}{os.getcwd()}')
-
-    format = "%d-%m-%Y %I:%M:%S %p"
-    now_utc = datetime.now(timezone('UTC'))
-    now_asia = now_utc.astimezone(timezone('Asia/Bangkok'))
-    print(f'{colors.OKGREEN}Current time in {colors.OKBLUE}Asia/Bangkok {colors.OKGREEN}time zone: {colors.FAIL}{now_asia.strftime(format)}')
-    print(' ')
 
 def main():
     try:
         banner()
-        header()
         print(f"{colors.OKBLUE}{Box.DoubleCube(f'Use arrow key to select the options')}{colors.ENDC}")
         questions = [
-            inquirer.List('list', message=f"{colors.WARNING}Select Option{colors.ENDC}", choices=['Login Accounts', 'Check Spam Account', 'Send message to users', 'Exit'])
+            inquirer.List('list', message=f"{colors.WARNING}Select Option{colors.ENDC}", choices=['Login Accounts', 'Check Spam Account','Scrape Member', 'Send message to users', 'Exit'])
         ]
 
         answers = inquirer.prompt(questions)
@@ -123,6 +112,8 @@ def main():
             asyncio.run(check_spam_bot_messages())
         elif answers['list'] == 'Send message to users':
             asyncio.run(send_message_to_users())  
+        elif answers['list'] == 'Scrape Member':
+            asyncio.run(scrape_member())  
         elif answers['list'] == 'Exit':
             print(f"{colors.OKGREEN}Exiting the program...{colors.WHITE}")
             sys.exit()
@@ -135,28 +126,6 @@ def main():
         print(f"{colors.HEADER}Press enter to exit{colors.ENDC}")
         input()
         sys.exit()
-        
-async def send_reaction(client, channel, message_id):
-    try:
-        reaction_emoji = types.ReactionEmoji(emoticon='❤️')
-        await client(functions.messages.SendReactionRequest(
-            peer=channel,
-            msg_id=message_id,
-            big=True,
-            add_to_recent=True,
-            reaction=[reaction_emoji]
-        ))
-    except Exception:
-        pass
-
-async def loading_animation(stop_event):
-    while not stop_event.is_set():
-        for dots in range(1, 4):
-            if stop_event.is_set():
-                break
-            print(f'\r{colors.WARNING}Verifying{"." * dots}{colors.WHITE}   ', end="", flush=True)
-            await asyncio.sleep(1)
-    print(f'\r{colors.HEADER}Verifying complete!{colors.WHITE}\n', end="", flush=True)
 
 async def loginacc():
     os.system('cls')
@@ -164,8 +133,8 @@ async def loginacc():
 
     config = configparser.ConfigParser()
     config.read('setting.ini')
-    api_id = config['Selllicense']['api_id']
-    api_hash = config['Selllicense']['api_hash']
+    api_id = config['SellLicense']['api']
+    api_hash = config['SellLicense']['hash']
     phone_number_file = os.path.join(os.getcwd(), 'Phone Number.txt')
 
     try:
@@ -180,72 +149,48 @@ async def loginacc():
         if not os.path.exists(session_dir):
             os.makedirs(session_dir)
 
-        session_file = os.path.join(session_dir, f'{phone_number}.session')
+    client = TelegramClient(session_file, api_id, api_hash)
+    await client.connect()
 
-        client = TelegramClient(session_file, api_id, api_hash)
-        await client.connect()
+    try:
+        if not await client.is_user_authorized():
+            print(f"Sending code request to {phone_number}")
+            await client.send_code_request(phone_number)
+            code = input('   Enter the code you received: ')
+            try:
+                await client.sign_in(phone_number, code)
+            except SessionPasswordNeededError:
+                while True:
+                    try:
+                        password = getpass.getpass(f'{colors.WHITE} ! Enter the Two-step verification password: ')
+                        await client.sign_in(password=password)
+                        break
+                    except Exception as e:
+                        print(f"{colors.FAIL}Invalid password. Please try again.{colors.WHITE}")
 
-        try:
-            if not await client.is_user_authorized():
-                print(f"Sending code request to {phone_number}")
-                await client.send_code_request(phone_number)
-                code = input('   Enter the code you received: ')
-                try:
-                    await client.sign_in(phone_number, code)
-                except SessionPasswordNeededError:
-                    while True:
-                        try:
-                            password = getpass.getpass(f'{colors.WHITE} ! Enter the Two-step verification password: ')
-                            await client.sign_in(password=password)
-                            break
-                        except Exception as e:
-                            print(f"{colors.FAIL}Invalid password. Please try again.{colors.WHITE}")
+            except UserDeactivatedBanError:
+                print(f"{colors.FAIL}This account ({phone_number}) has been banned.{colors.WHITE}")
+                return
+            except UserDeactivatedError:
+                print(f"{colors.FAIL}This account ({phone_number}) has been deleted.{colors.WHITE}")
+                return
+            except Exception as e:
+                print(f"{colors.FAIL}The phone code entered was invalid{colors.WHITE}")
+                await client.disconnect()
+                return
+                sys.exit()
+        else:
+            me = await client.get_me()
+            print(f"{colors.OKGREEN}   User '{me.first_name} {me.last_name}' is logged in successfully.{colors.WHITE}")
 
-                except UserDeactivatedBanError:
-                    print(f"{colors.FAIL}This account ({phone_number}) has been banned.{colors.WHITE}")
-                    continue  # Skip to the next account
-                except UserDeactivatedError:
-                    print(f"{colors.FAIL}This account ({phone_number}) has been deleted.{colors.WHITE}")
-                    continue  # Skip to the next account
-                except Exception as e:
-                    print(f"{colors.FAIL}The phone code entered was invalid{colors.WHITE}")
-                    await client.disconnect()
-                    return
-                    sys.exit() 
-            else:
-                me = await client.get_me()
-                print(f"{colors.OKGREEN}⚛ User '{me.first_name} {me.last_name}' is logged in successfully.{colors.WHITE}")
-                await client(JoinChannelRequest('@it_computer_khmer'))
-                await client(functions.account.UpdateProfileRequest(
-                    about='Software by @it_computer_khmer'
-                ))
-
-            channel_username = '@it_computer_khmer'
-            channel = await client.get_entity(channel_username)
-            channel_entity = types.InputPeerChannel(channel_id=channel.id, access_hash=channel.access_hash)
-
-            messages = []
-            async for message in client.iter_messages(channel_entity, limit=5):
-                messages.append(message)
-
-            stop_event = asyncio.Event()
-            loading_task = asyncio.create_task(loading_animation(stop_event))
-
-            for message in reversed(messages):
-                await send_reaction(client, channel_entity, message.id)
-
-            stop_event.set()
-            await loading_task
-            await client.disconnect()
-
-        except UserDeactivatedBanError:
-            print(f"{colors.FAIL}This account ({phone_number}) has been banned.{colors.WHITE}")
-        except UserDeactivatedError:
-            print(f"{colors.FAIL}This account ({phone_number}) has been deleted.{colors.WHITE}")
-        except Exception as e:
-            print(f"{colors.FAIL}An error occurred: {str(e)}{colors.WHITE}")
-        finally:
-            await client.disconnect()
+    except UserDeactivatedBanError:
+        print(f"{colors.FAIL}This account ({phone_number}) has been banned.{colors.WHITE}")
+    except UserDeactivatedError:
+        print(f"{colors.FAIL}This account ({phone_number}) has been deleted.{colors.WHITE}")
+    except Exception as e:
+        print(f"{colors.FAIL}An error occurred: {str(e)}{colors.WHITE}")
+    finally:
+        await client.disconnect()
 
     sys.exit() 
 
@@ -261,6 +206,11 @@ async def check_spam_bot_messages():
     api_id = config['Selllicense']['api_id']
     api_hash = config['Selllicense']['api_hash']
     phone_file = os.path.join(os.getcwd(), 'Phone Number.txt')
+    
+    session_file = os.path.join(session_dir, f'{phone_number}.session')
+
+    client = TelegramClient(session_file, api_id, api_hash)
+    await client.connect()
 
     try:
         with open(phone_file, 'r') as file:
@@ -303,6 +253,68 @@ async def check_spam_bot_messages():
             print(f'{colors.FAIL}No dialog found with @SpamBot{colors.ENDC}')
 
         await client.disconnect()
+
+async def scrape_member():
+    clr()
+    banner()
+    config = configparser.ConfigParser()
+    config.read("setting.ini")
+    link1 = config['Groups']['from_group'].strip()
+    phone_file = os.path.join(os.getcwd(), 'Phone Number.txt')
+
+    try:
+        with open(phone_file, 'r') as file:
+            phone_numbers_list = file.read().splitlines()
+            if not phone_numbers_list:
+                print(f"{colors.FAIL}No phone numbers found in {phone_file}{colors.WHITE}")
+                return
+    except FileNotFoundError:
+        print(f"{colors.FAIL}File {phone_file} not found{colors.WHITE}")
+        return
+
+    print(f"{colors.OKGREEN}Scraping all members with account: {colors.OKBLUE}'{phone}'{colors.ENDC}")
+
+    # Create client and connect manually to avoid auto-login prompt
+    client = TelegramClient(f"sessions/{phone}", API_ID, API_HASH)
+    client.connect()
+    
+    if not client.is_user_authorized():
+        print(f"{colors.FAIL}❖ Error: Account {phone} not logged in. Please login first (Option 1){colors.ENDC}")
+        client.disconnect()
+        return
+
+    try:
+        group = client.get_entity(link1)
+        channel_full_info = client(GetFullChannelRequest(group))
+        total_members = channel_full_info.full_chat.participants_count
+
+        count = 1
+
+        def write(group, member):
+            nonlocal count
+            username = member.username if member.username else ''
+            status = member.status.was_online if isinstance(member.status, UserStatusOffline) else type(member.status).__name__
+            writer.writerow([count, username, member.id, member.access_hash, member.first_name, group.title, status, 'All'])
+            count += 1
+
+        initialize_csv()
+        with open("data.csv", "a", encoding='UTF-8', newline='') as f:
+            writer = csv.writer(f, delimiter=",")
+            try:
+                index = 0
+                for member in client.iter_participants(group, aggressive=True):
+                    print(f"\r{progress_bar(index + 1, total_members)}", end="")
+                    if index % 100 == 0:
+                        time.sleep(3)
+                    if not member.bot:
+                        write(group, member)
+                    index += 1
+            except Exception as e:
+                print(f"\n{colors.FAIL}Error occurred: {str(e)}. Check data.csv for scraped members.{colors.ENDC}")
+
+        print(f"\n{colors.OKGREEN}Scraping complete! {count-1} users saved to data.csv.{colors.ENDC}")
+    finally:
+        client.disconnect()
 
 async def send_message_to_users():
     os.system('cls')
