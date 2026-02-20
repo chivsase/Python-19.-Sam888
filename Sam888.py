@@ -6,7 +6,8 @@ from telethon.errors import (
     UserDeactivatedError, 
     UserInvalidError, 
     RPCError, 
-    FloodWaitError
+    FloodWaitError,
+    UserPrivacyRestrictedError
 )
 from telethon.tl.functions.channels import JoinChannelRequest, GetFullChannelRequest
 from telethon.tl.types import UserStatusOffline
@@ -368,10 +369,104 @@ async def send_message_to_username():
     limit_chat = int(config['SellLicense']['limit_chat'])
     
     phone_number_file = os.path.join(os.getcwd(), 'phone_number.txt')
-    image_message_file = os.path.join(os.getcwd(), 'image_message.csv')
     data_file = os.path.join(os.getcwd(), 'data.csv')
+    message_text_file = os.path.join(os.getcwd(), 'message_text.txt')
+    message_image_file = os.path.join(os.getcwd(), 'message_image.txt')
 
-    print(f"{Colors.OKBLUE}Starting message delivery...{Colors.WHITE}")
+    message_text = ""
+    if os.path.exists(message_text_file):
+        with open(message_text_file, 'r', encoding='utf-8') as f:
+            message_text = f.read().strip()
+
+    image_path = None
+    if os.path.exists(message_image_file):
+        with open(message_image_file, 'r', encoding='utf-8') as f:
+            possible_path = f.read().strip()
+            if possible_path and os.path.exists(possible_path):
+                image_path = possible_path
+
+    if not message_text and not image_path:
+        print(f"{Colors.FAIL}Error: Both message_text.txt and message_image.txt (with valid path) are missing or empty!{Colors.WHITE}")
+        return
+
+    phones = []
+    if os.path.exists(phone_number_file):
+        with open(phone_number_file, 'r') as f:
+            phones = [line.strip() for line in f if line.strip()]
+
+    if not phones:
+        print(f"{Colors.FAIL}Error: No phone numbers found in phone_number.txt!{Colors.WHITE}")
+        return
+
+    targets = []
+    if os.path.exists(data_file):
+        with open(data_file, 'r', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            next(reader, None)  # Skip header
+            for row in reader:
+                if len(row) > 1 and row[1]:  # Ensure username exists
+                    targets.append(row[1])
+
+    if not targets:
+        print(f"{Colors.FAIL}Error: No targets found in data.csv!{Colors.WHITE}")
+        return
+
+    print(f"{Colors.OKCYAN}Loaded {len(targets)} targets and {len(phones)} accounts.{Colors.WHITE}")
+    if image_path:
+        print(f"{Colors.OKGREEN}Image found: {image_path}{Colors.WHITE}")
+    
+    target_index = 0
+    for phone in phones:
+        if target_index >= len(targets):
+            break
+
+        session_file = os.path.join(os.getcwd(), 'Session', phone)
+        client = TelegramClient(session_file, api_id, api_hash)
+        
+        try:
+            await client.connect()
+            if not await client.is_user_authorized():
+                print(f"{Colors.FAIL}[{phone}] Not logged in. Skipping.{Colors.WHITE}")
+                continue
+
+            print(f"{Colors.OKGREEN}[{phone}] Successfully logged in. Sending messages...{Colors.WHITE}")
+            
+            sent_count = 0
+            while sent_count < limit_chat and target_index < len(targets):
+                username = targets[target_index]
+                try:
+                    if image_path:
+                        await client.send_file(username, image_path, caption=message_text)
+                    else:
+                        await client.send_message(username, message_text)
+                        
+                    print(f"{Colors.OKGREEN}[{phone}] Message sent to @{username} ({sent_count + 1}/{limit_chat}){Colors.WHITE}")
+                    sent_count += 1
+                    target_index += 1
+                    
+                    if target_index < len(targets) and sent_count < limit_chat:
+                        print(f"{Colors.WARNING}Waiting {delay_chat} seconds...{Colors.WHITE}")
+                        await asyncio.sleep(delay_chat)
+                
+                except FloodWaitError as e:
+                    print(f"{Colors.WARNING}[{phone}] Flood wait for {e.seconds} seconds. Switching account.{Colors.WHITE}")
+                    break
+                except UserPrivacyRestrictedError:
+                    print(f"{Colors.FAIL}[{phone}] Could not send to @{username}: Privacy restricted. Skipping.{Colors.WHITE}")
+                    target_index += 1
+                except RPCError as e:
+                    print(f"{Colors.FAIL}[{phone}] Error sending to @{username}: {str(e)}{Colors.WHITE}")
+                    target_index += 1
+                except Exception as e:
+                    print(f"{Colors.FAIL}[{phone}] Unexpected error: {str(e)}{Colors.WHITE}")
+                    target_index += 1
+
+        except Exception as e:
+            print(f"{Colors.FAIL}[{phone}] Connection error: {str(e)}{Colors.WHITE}")
+        finally:
+            await client.disconnect()
+
+    print(f"{Colors.OKGREEN}All tasks completed! Sent messages to {target_index} users.{Colors.WHITE}")
 
 if __name__ == "__main__":
     main()
