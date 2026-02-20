@@ -390,8 +390,12 @@ async def send_message_to_username():
     if os.path.exists(message_image_file):
         with open(message_image_file, 'r', encoding='utf-8') as f:
             possible_path = f.read().strip()
-            if possible_path and os.path.exists(possible_path):
-                image_path = possible_path
+            if possible_path:
+                if os.path.exists(possible_path):
+                    image_path = possible_path
+                else:
+                    print(f"{Colors.FAIL}Error: Image file not found at: {possible_path}{Colors.WHITE}\n(Please check path in message_image.txt)")
+                    return
 
     if not message_text and not image_path:
         print(f"{Colors.FAIL}Error: Both message_text.txt and message_image.txt (with valid path) are missing or empty!{Colors.WHITE}")
@@ -419,63 +423,85 @@ async def send_message_to_username():
         print(f"{Colors.FAIL}Error: No targets found in data.csv!{Colors.WHITE}")
         return
 
-    print(f"{Colors.OKCYAN}Loaded {len(targets)} targets and {len(phones)} accounts.{Colors.WHITE}")
-    if image_path:
-        print(f"{Colors.OKGREEN}Image found: {image_path}{Colors.WHITE}")
+    print(f"\n{Colors.HEADER}{'='*50}{Colors.WHITE}")
+    print(f"{Colors.OKCYAN}   MESSAGE DELIVERY SUMMARY{Colors.WHITE}")
+    print(f"{Colors.HEADER}{'='*50}{Colors.WHITE}")
+    print(f" > Total Accounts: {Colors.OKGREEN}{len(phones)}{Colors.WHITE}")
+    print(f" > Total Targets : {Colors.OKGREEN}{len(targets)}{Colors.WHITE}")
+    print(f" > Message Type  : {Colors.OKGREEN}{'Image + Text' if image_path and message_text else ('Image Only' if image_path else 'Text Only')}{Colors.WHITE}")
+    print(f" > Delay Range   : {Colors.OKGREEN}{delay_min}s - {delay_max}s{Colors.WHITE}")
+    print(f" > Limit/Account : {Colors.OKGREEN}{limit_chat}{Colors.WHITE}")
+    print(f"{Colors.HEADER}{'='*50}{Colors.WHITE}\n")
     
+    total_sent = 0
+    total_failed = 0
     target_index = 0
-    for phone in phones:
+    
+    for i, phone in enumerate(phones):
         if target_index >= len(targets):
             break
 
+        print(f"{Colors.OKBLUE}[Account {i+1}/{len(phones)}] Connecting to {phone}...{Colors.WHITE}")
         session_file = os.path.join(os.getcwd(), 'Session', phone)
         client = TelegramClient(session_file, api_id, api_hash)
         
         try:
             await client.connect()
             if not await client.is_user_authorized():
-                print(f"{Colors.FAIL}[{phone}] Not logged in. Skipping.{Colors.WHITE}")
+                print(f"{Colors.FAIL}   [!] {phone} is not logged in. Skipping this account.{Colors.WHITE}")
                 continue
 
-            print(f"{Colors.OKGREEN}[{phone}] Successfully logged in. Sending messages...{Colors.WHITE}")
+            print(f"{Colors.OKGREEN}   [✓] {phone} Authorized. Starting delivery loop...{Colors.WHITE}")
             
             sent_count = 0
             while sent_count < limit_chat and target_index < len(targets):
                 username = targets[target_index]
                 try:
+                    print(f"{Colors.WHITE}[{target_index+1}/{len(targets)}] Sending to @{username}...", end=" ", flush=True)
                     if image_path:
                         await client.send_file(username, image_path, caption=message_text)
                     else:
                         await client.send_message(username, message_text)
                         
-                    print(f"{Colors.OKGREEN}[{phone}] Message sent to @{username} ({sent_count + 1}/{limit_chat}){Colors.WHITE}")
+                    print(f"{Colors.OKGREEN}SENT ✓{Colors.WHITE}")
                     sent_count += 1
+                    total_sent += 1
                     target_index += 1
                     
                     if target_index < len(targets) and sent_count < limit_chat:
                         sleep_time = random.randint(delay_min, delay_max)
-                        print(f"{Colors.WARNING}Waiting {sleep_time} seconds (randomized)...{Colors.WHITE}")
+                        print(f"    {Colors.WARNING}Waiting {sleep_time}s...{Colors.WHITE}")
                         await asyncio.sleep(sleep_time)
                 
                 except FloodWaitError as e:
-                    print(f"{Colors.WARNING}[{phone}] Flood wait for {e.seconds} seconds. Switching account.{Colors.WHITE}")
+                    print(f"{Colors.WARNING}FLOOD WAIT!{Colors.WHITE}")
+                    print(f"    [!] Account {phone} hit flood limit for {e.seconds}s. Switching...{Colors.WHITE}")
                     break
                 except UserPrivacyRestrictedError:
-                    print(f"{Colors.FAIL}[{phone}] Could not send to @{username}: Privacy restricted. Skipping.{Colors.WHITE}")
+                    print(f"{Colors.FAIL}PRIVACY RESTRICTED!{Colors.WHITE}")
+                    total_failed += 1
                     target_index += 1
                 except RPCError as e:
-                    print(f"{Colors.FAIL}[{phone}] Error sending to @{username}: {str(e)}{Colors.WHITE}")
+                    print(f"{Colors.FAIL}RPC ERROR: {str(e)}{Colors.WHITE}")
+                    total_failed += 1
                     target_index += 1
                 except Exception as e:
-                    print(f"{Colors.FAIL}[{phone}] Unexpected error: {str(e)}{Colors.WHITE}")
+                    print(f"{Colors.FAIL}ERROR: {str(e)}{Colors.WHITE}")
+                    total_failed += 1
                     target_index += 1
 
         except Exception as e:
-            print(f"{Colors.FAIL}[{phone}] Connection error: {str(e)}{Colors.WHITE}")
+            print(f"{Colors.FAIL}   [!] Connection error on {phone}: {str(e)}{Colors.WHITE}")
         finally:
             await client.disconnect()
 
-    print(f"{Colors.OKGREEN}All tasks completed! Sent messages to {target_index} users.{Colors.WHITE}")
+    print(f"\n{Colors.HEADER}{'='*50}{Colors.WHITE}")
+    print(f"{Colors.OKCYAN}   DELIVERY PROCESS COMPLETE{Colors.WHITE}")
+    print(f"{Colors.HEADER}{'='*50}{Colors.WHITE}")
+    print(f" > Total Targets Processed : {target_index}")
+    print(f" > Total Messages Sent     : {Colors.OKGREEN}{total_sent}{Colors.WHITE}")
+    print(f" > Total Skips/Failed      : {Colors.FAIL}{total_failed}{Colors.WHITE}")
+    print(f"{Colors.HEADER}{'='*50}{Colors.WHITE}")
 
 if __name__ == "__main__":
     main()
