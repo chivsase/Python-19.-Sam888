@@ -119,7 +119,7 @@ def main():
         elif answers['list'] == 'Check Spam Account':
             asyncio.run(check_spam_bot_messages())
         elif answers['list'] == 'Send message to users':
-            asyncio.run(send_message_to_users())  
+            asyncio.run(send_message_to_username())  
         elif answers['list'] == 'Scrape Member':
             asyncio.run(scrape_members())  
         elif answers['list'] == 'Exit':
@@ -143,7 +143,7 @@ async def login_accounts():
     config.read('setting.ini')
     api_id = config['SellLicense']['api']
     api_hash = config['SellLicense']['hash']
-    phones_path = os.path.join(os.getcwd(), 'Phone Number.txt')
+    phones_path = os.path.join(os.getcwd(), 'phone_number.txt')
 
     try:
         with open(phones_path, 'r') as file:
@@ -216,7 +216,7 @@ async def check_spam_bot_messages():
 
     api_id = config['SellLicense']['api']
     api_hash = config['SellLicense']['hash']
-    phones_path = os.path.join(os.getcwd(), 'Phone Number.txt')
+    phones_path = os.path.join(os.getcwd(), 'phone_number.txt')
     
     try:
         with open(phones_path, 'r') as file:
@@ -281,7 +281,7 @@ async def scrape_members():
     if not source_group:
         source_group = input(f"{Colors.WARNING}Enter Group/Channel link to scrape from: {Colors.WHITE}")
         
-    phones_path = os.path.join(os.getcwd(), 'Phone Number.txt')
+    phones_path = os.path.join(os.getcwd(), 'phone_number.txt')
 
     try:
         with open(phones_path, 'r') as file:
@@ -355,19 +355,23 @@ async def scrape_members():
     finally:
         await client.disconnect()
 
-async def send_message_to_users():
-    os.system('cls')
-    bannerSendMessage()
+async def send_message_to_username():
+    os.system('cls' if os.name == 'nt' else 'clear')
+    banner_send_message()
+    
     config = configparser.ConfigParser()
     config.read('setting.ini')
 
     api_id = config['SellLicense']['api']
     api_hash = config['SellLicense']['hash']
-    phone_number_file = os.path.join(os.getcwd(), 'Phone Number.txt')
-    delay_chat_to_users = int(config['SellLicense']['delay_chat_to_users'])
+    delay_chat = int(config['SellLicense']['delay_chat_to_users'])
     limit_chat = int(config['SellLicense']['limit_chat'])
-    image_message_file = os.path.join(os.getcwd(), 'image_message.csv')
     
+    phone_number_file = os.path.join(os.getcwd(), 'phone_number.txt')
+    image_message_file = os.path.join(os.getcwd(), 'image_message.csv')
+    data_file = os.path.join(os.getcwd(), 'data.csv')
+
+    print(f"{Colors.OKBLUE}Starting message delivery...{Colors.WHITE}")
 
 if __name__ == "__main__":
     main()
