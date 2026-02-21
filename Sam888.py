@@ -27,6 +27,11 @@ from pytz import timezone
 from pystyle import *
 from PIL import Image
 
+if getattr(sys, 'frozen', False):
+    BASE_PATH = os.path.dirname(sys.executable)
+else:
+    BASE_PATH = os.path.dirname(os.path.abspath(__file__))
+
 class Colors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -147,7 +152,7 @@ async def login_accounts():
     config.read('setting.ini')
     api_id = config['SellLicense']['api']
     api_hash = config['SellLicense']['hash']
-    phones_path = os.path.join(os.getcwd(), 'phone_number.txt')
+    phones_path = os.path.join(BASE_PATH, 'phone_number.txt')
 
     try:
         if not api_id or not api_hash:
@@ -168,14 +173,14 @@ async def login_accounts():
         print(f"{Colors.FAIL}Error: {phones_path} not found!{Colors.WHITE}")
         return
 
-    session_dir = os.path.join(os.getcwd(), 'Session')
+    session_dir = os.path.join(BASE_PATH, 'Session')
     if not os.path.exists(session_dir):
         os.makedirs(session_dir)
 
     for phone in phone_numbers:
         if not phone.strip():
             continue
-        session_file = os.path.join(session_dir, phone)
+        session_file = os.path.join(BASE_PATH, 'Session', phone)
         client = TelegramClient(session_file, api_id, api_hash)
         await client.connect()
 
@@ -241,7 +246,7 @@ async def check_spam_bot_messages():
         print(f"{Colors.FAIL}Error: API ID in setting.ini must be a number!{Colors.WHITE}")
         return
 
-    phones_path = os.path.join(os.getcwd(), 'phone_number.txt')
+    phones_path = os.path.join(BASE_PATH, 'phone_number.txt')
     
     try:
         with open(phones_path, 'r') as file:
@@ -256,7 +261,7 @@ async def check_spam_bot_messages():
     for phone in phone_numbers:
         if not phone.strip():
             continue
-        session_file = os.path.join(os.getcwd(), 'Session', phone)
+        session_file = os.path.join(BASE_PATH, 'Session', phone)
         client = TelegramClient(session_file, api_id, api_hash)
         
         try:
@@ -319,7 +324,7 @@ async def scrape_members():
         print(f"{Colors.WARNING}No 'from_group' found in setting.ini.{Colors.WHITE}")
         source_group = input(f"{Colors.WARNING}Enter Group/Channel link to scrape from: {Colors.WHITE}")
     
-    phones_path = os.path.join(os.getcwd(), 'phone_number.txt')
+    phones_path = os.path.join(BASE_PATH, 'phone_number.txt')
 
     try:
         with open(phones_path, 'r') as file:
@@ -371,7 +376,7 @@ async def scrape_members():
             csv_writer.writerow([count, username, member.first_name, group_title, status, 'All'])
             count += 1
 
-        with open("data.csv", "w", encoding='UTF-8', newline='') as f:
+        with open(os.path.join(BASE_PATH, "data.csv"), "w", encoding='UTF-8', newline='') as f:
             csv_writer = csv.writer(f, delimiter=",")
             csv_writer.writerow(['Index', 'Username', 'First Name', 'Group', 'Status', 'Type'])
             
@@ -424,10 +429,10 @@ async def send_message_to_username():
         print(f"{Colors.WARNING}Warning: delay_max ({delay_max}) is less than delay_min ({delay_min}). Swapping them.{Colors.WHITE}")
         delay_min, delay_max = delay_max, delay_min
     
-    phone_number_file = os.path.join(os.getcwd(), 'phone_number.txt')
-    data_file = os.path.join(os.getcwd(), 'data.csv')
-    message_text_file = os.path.join(os.getcwd(), 'message_text.txt')
-    message_image_file = os.path.join(os.getcwd(), 'message_image.txt')
+    phone_number_file = os.path.join(BASE_PATH, 'phone_number.txt')
+    data_file = os.path.join(BASE_PATH, 'data.csv')
+    message_text_file = os.path.join(BASE_PATH, 'message_text.txt')
+    message_image_file = os.path.join(BASE_PATH, 'message_image.txt')
 
     message_text = ""
     if os.path.exists(message_text_file):
@@ -491,7 +496,7 @@ async def send_message_to_username():
             break
 
         print(f"{Colors.OKBLUE}[Account {i+1}/{len(phones)}] Connecting to {phone}...{Colors.WHITE}")
-        session_file = os.path.join(os.getcwd(), 'Session', phone)
+        session_file = os.path.join(BASE_PATH, 'Session', phone)
         client = TelegramClient(session_file, api_id, api_hash)
         
         try:
@@ -513,15 +518,18 @@ async def send_message_to_username():
                         except Exception as e:
                             if 'has_transparency_data' in str(e):
                                 # Convert to RGB and send as photo to avoid transparency error
-                                temp_path = os.path.join(os.getcwd(), f"temp_{int(time.time())}.jpg")
+                                temp_path = os.path.join(BASE_PATH, f"temp_{int(time.time())}.jpg")
                                 try:
                                     with Image.open(image_path) as img:
                                         img.convert('RGB').save(temp_path, 'JPEG', quality=90)
                                     await client.send_file(username, temp_path, caption=message_text)
-                                    if os.path.exists(temp_path): os.remove(temp_path)
-                                except Exception:
-                                    # Final fallback to document if conversion fails
+                                except Exception as conversion_error:
+                                    # Final fallback to document if conversion or sending fails
                                     await client.send_file(username, image_path, caption=message_text, force_document=True)
+                                finally:
+                                    if os.path.exists(temp_path):
+                                        try: os.remove(temp_path)
+                                        except: pass
                             else:
                                 raise e
                     else:
@@ -572,6 +580,9 @@ async def send_message_to_username():
                         pass
                 except RPCError as e:
                     print(f"{Colors.FAIL}RPC ERROR: {str(e)}{Colors.WHITE}")
+                    if "Too many requests" in str(e) or "Slow mode" in str(e):
+                        print(f"    {Colors.WARNING}[!] Account {phone} is rate limited. Switching...{Colors.WHITE}")
+                        break
                     total_failed += 1
                     target_index += 1
                     # Save progress on error as well
