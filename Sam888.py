@@ -458,14 +458,15 @@ async def send_message_to_username():
         print(f"{Colors.FAIL}Error: No phone numbers found in phone_number.txt!{Colors.WHITE}")
         return
 
-    targets = []
+    all_rows = []
+    header = ['Index', 'Username', 'First Name', 'Group', 'Status', 'Type']
     if os.path.exists(data_file):
         with open(data_file, 'r', encoding='utf-8') as f:
             reader = csv.reader(f)
-            next(reader, None)  # Skip header
-            for row in reader:
-                if len(row) > 1 and row[1]:  # Ensure username exists
-                    targets.append(row[1])
+            header = next(reader, header)
+            all_rows = [row for row in reader if len(row) > 1 and row[1]]
+
+    targets = [row[1] for row in all_rows]
 
     if not targets:
         print(f"{Colors.FAIL}Error: No targets found in data.csv!{Colors.WHITE}")
@@ -530,6 +531,15 @@ async def send_message_to_username():
                     sent_count += 1
                     total_sent += 1
                     target_index += 1
+
+                    # Save progress: Remove processed username from data.csv immediately
+                    try:
+                        with open(data_file, 'w', encoding='utf-8', newline='') as f:
+                            writer = csv.writer(f)
+                            writer.writerow(header)
+                            writer.writerows(all_rows[target_index:])
+                    except Exception:
+                        pass
                     
                     if target_index < len(targets) and sent_count < limit_chat:
                         sleep_time = random.randint(delay_min, delay_max)
@@ -539,19 +549,51 @@ async def send_message_to_username():
                 except FloodWaitError as e:
                     print(f"{Colors.WARNING}FLOOD WAIT!{Colors.WHITE}")
                     print(f"    [!] Account {phone} hit flood limit for {e.seconds}s. Switching...{Colors.WHITE}")
+                    # Save progress on error as well
+                    try:
+                        with open(data_file, 'w', encoding='utf-8', newline='') as f:
+                            writer = csv.writer(f)
+                            writer.writerow(header)
+                            writer.writerows(all_rows[target_index:])
+                    except Exception:
+                        pass
                     break
                 except UserPrivacyRestrictedError:
                     print(f"{Colors.FAIL}PRIVACY RESTRICTED!{Colors.WHITE}")
                     total_failed += 1
                     target_index += 1
+                    # Save progress on error as well
+                    try:
+                        with open(data_file, 'w', encoding='utf-8', newline='') as f:
+                            writer = csv.writer(f)
+                            writer.writerow(header)
+                            writer.writerows(all_rows[target_index:])
+                    except Exception:
+                        pass
                 except RPCError as e:
                     print(f"{Colors.FAIL}RPC ERROR: {str(e)}{Colors.WHITE}")
                     total_failed += 1
                     target_index += 1
+                    # Save progress on error as well
+                    try:
+                        with open(data_file, 'w', encoding='utf-8', newline='') as f:
+                            writer = csv.writer(f)
+                            writer.writerow(header)
+                            writer.writerows(all_rows[target_index:])
+                    except Exception:
+                        pass
                 except Exception as e:
                     print(f"{Colors.FAIL}ERROR: {str(e)}{Colors.WHITE}")
                     total_failed += 1
                     target_index += 1
+                    # Save progress on error as well
+                    try:
+                        with open(data_file, 'w', encoding='utf-8', newline='') as f:
+                            writer = csv.writer(f)
+                            writer.writerow(header)
+                            writer.writerows(all_rows[target_index:])
+                    except Exception:
+                        pass
 
         except Exception as e:
             print(f"{Colors.FAIL}   [!] Connection error on {phone}: {str(e)}{Colors.WHITE}")
