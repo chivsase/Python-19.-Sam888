@@ -1,4 +1,4 @@
 pip install --upgrade sip
 pip install --upgrade PyQt5
 
-pyinstaller --onefile --hidden-import=inquirer --hidden-import=readchar --copy-metadata readchar .\TeleSMG_Production.py --icon "C:\Users\ASUS ROG\OneDrive\Documents-python-code\1.Production\12. Telegram Send Message\image\TeleSMG_logo_for_Telegram_message_with_a_technology_theme.ico"
+pyinstaller --onefile --hidden-import=inquirer --hidden-import=readchar --copy-metadata readchar .\Sam888.py --icon "C:\Users\User\OneDrive - Setha\OneDrive - SpringBoard4Education\Documents\Document-python-code\1.Production\Python 19. Sam888\image\sam888_logo.ico"

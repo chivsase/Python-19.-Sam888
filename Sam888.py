@@ -148,10 +148,22 @@ async def login_accounts():
     phones_path = os.path.join(os.getcwd(), 'phone_number.txt')
 
     try:
+        if not api_id or not api_hash:
+            print(f"{Colors.FAIL}Error: API ID or API Hash is missing in setting.ini!{Colors.WHITE}")
+            return
+        api_id = int(api_id)
+    except (ValueError, KeyError):
+        print(f"{Colors.FAIL}Error: API ID in setting.ini must be a number!{Colors.WHITE}")
+        return
+
+    try:
         with open(phones_path, 'r') as file:
-            phone_numbers = file.read().splitlines()
+            phone_numbers = [line.strip() for line in file if line.strip()]
+        if not phone_numbers:
+            print(f"{Colors.FAIL}Error: phone_number.txt is empty!{Colors.WHITE}")
+            return
     except FileNotFoundError:
-        print(f"File {phones_path} not found")
+        print(f"{Colors.FAIL}Error: {phones_path} not found!{Colors.WHITE}")
         return
 
     session_dir = os.path.join(os.getcwd(), 'Session')
@@ -216,18 +228,27 @@ async def check_spam_bot_messages():
     config = configparser.ConfigParser()
     config.read('setting.ini')
 
-    api_id = config['SellLicense']['api']
-    api_hash = config['SellLicense']['hash']
+    try:
+        api_id = config['SellLicense']['api']
+        api_hash = config['SellLicense']['hash']
+        if not api_id or not api_hash:
+            print(f"{Colors.FAIL}Error: API ID or API Hash is missing in setting.ini!{Colors.WHITE}")
+            return
+        api_id = int(api_id)
+    except (ValueError, KeyError):
+        print(f"{Colors.FAIL}Error: API ID in setting.ini must be a number!{Colors.WHITE}")
+        return
+
     phones_path = os.path.join(os.getcwd(), 'phone_number.txt')
     
     try:
         with open(phones_path, 'r') as file:
-            phone_numbers = file.read().splitlines()
+            phone_numbers = [line.strip() for line in file if line.strip()]
             if not phone_numbers:
-                print(f"{Colors.FAIL}No phone numbers found in {phones_path}{Colors.WHITE}")
+                print(f"{Colors.FAIL}Error: No phone numbers found in phone_number.txt!{Colors.WHITE}")
                 return
     except FileNotFoundError:
-        print(f"{Colors.FAIL}File {phones_path} not found{Colors.WHITE}")
+        print(f"{Colors.FAIL}Error: {phones_path} not found!{Colors.WHITE}")
         return
 
     for phone in phone_numbers:
@@ -273,26 +294,39 @@ async def check_spam_bot_messages():
 async def scrape_members():
     os.system('cls')
     banner()
+    if not os.path.exists("setting.ini"):
+        print(f"{Colors.FAIL}Error: setting.ini not found!{Colors.WHITE}")
+        return
+
     config = configparser.ConfigParser()
     config.read("setting.ini")
     
-    api_id = config['SellLicense']['api']
-    api_hash = config['SellLicense']['hash']
+    try:
+        api_id = config['SellLicense']['api']
+        api_hash = config['SellLicense']['hash']
+        if not api_id or not api_hash:
+            print(f"{Colors.FAIL}Error: API ID or API Hash is missing in setting.ini!{Colors.WHITE}")
+            return
+        api_id = int(api_id)
+    except (ValueError, KeyError):
+        print(f"{Colors.FAIL}Error: API ID in setting.ini must be a number!{Colors.WHITE}")
+        return
     
     source_group = config['SellLicense'].get('from_group', '').strip()
     if not source_group:
+        print(f"{Colors.WARNING}No 'from_group' found in setting.ini.{Colors.WHITE}")
         source_group = input(f"{Colors.WARNING}Enter Group/Channel link to scrape from: {Colors.WHITE}")
-        
+    
     phones_path = os.path.join(os.getcwd(), 'phone_number.txt')
 
     try:
         with open(phones_path, 'r') as file:
-            phone_numbers = [p for p in file.read().splitlines() if p.strip()]
+            phone_numbers = [p.strip() for p in file if p.strip()]
             if not phone_numbers:
-                print(f"{Colors.FAIL}No phone numbers found in {phones_path}{Colors.WHITE}")
+                print(f"{Colors.FAIL}Error: No phone numbers found in phone_number.txt!{Colors.WHITE}")
                 return
     except FileNotFoundError:
-        print(f"{Colors.FAIL}File {phones_path} not found{Colors.WHITE}")
+        print(f"{Colors.FAIL}Error: {phones_path} not found!{Colors.WHITE}")
         return
 
     phone = phone_numbers[0]
@@ -361,20 +395,32 @@ async def send_message_to_username():
     os.system('cls' if os.name == 'nt' else 'clear')
     banner_send_message()
     
+    if not os.path.exists("setting.ini"):
+        print(f"{Colors.FAIL}Error: setting.ini not found!{Colors.WHITE}")
+        return
+
     config = configparser.ConfigParser()
     config.read('setting.ini')
 
-    api_id = config['SellLicense']['api']
-    api_hash = config['SellLicense']['hash']
-    delay_min = int(config['SellLicense']['delay_min'])
-    delay_max = int(config['SellLicense']['delay_max'])
+    try:
+        api_id = config['SellLicense']['api']
+        api_hash = config['SellLicense']['hash']
+        if not api_id or not api_hash:
+            print(f"{Colors.FAIL}Error: API ID or API Hash is missing in setting.ini!{Colors.WHITE}")
+            return
+        api_id = int(api_id)
+        
+        delay_min = int(config['SellLicense']['delay_min'])
+        delay_max = int(config['SellLicense']['delay_max'])
+        limit_chat = int(config['SellLicense']['limit_chat'])
+    except (ValueError, KeyError) as e:
+        print(f"{Colors.FAIL}Error: Missing or invalid setting in setting.ini ({str(e)}){Colors.WHITE}")
+        return
     
     # Ensure max is not less than min to prevent crash
     if delay_max < delay_min:
         print(f"{Colors.WARNING}Warning: delay_max ({delay_max}) is less than delay_min ({delay_min}). Swapping them.{Colors.WHITE}")
         delay_min, delay_max = delay_max, delay_min
-    
-    limit_chat = int(config['SellLicense']['limit_chat'])
     
     phone_number_file = os.path.join(os.getcwd(), 'phone_number.txt')
     data_file = os.path.join(os.getcwd(), 'data.csv')
@@ -389,7 +435,7 @@ async def send_message_to_username():
     image_path = None
     if os.path.exists(message_image_file):
         with open(message_image_file, 'r', encoding='utf-8') as f:
-            possible_path = f.read().strip()
+            possible_path = f.read().strip().strip('"').strip("'")
             if possible_path:
                 if os.path.exists(possible_path):
                     image_path = possible_path
