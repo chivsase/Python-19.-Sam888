@@ -25,6 +25,7 @@ import random
 from datetime import datetime, date
 from pytz import timezone
 from pystyle import *
+from PIL import Image
 
 class Colors:
     HEADER = '\033[95m'
@@ -36,6 +37,7 @@ class Colors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
     WHITE = '\033[97m'
+    OKCYAN = '\033[96m'
 
 def center_text(text):
     terminal_width = shutil.get_terminal_size().columns
@@ -505,7 +507,22 @@ async def send_message_to_username():
                 try:
                     print(f"{Colors.WHITE}[{target_index+1}/{len(targets)}] Sending to @{username}...", end=" ", flush=True)
                     if image_path:
-                        await client.send_file(username, image_path, caption=message_text)
+                        try:
+                            await client.send_file(username, image_path, caption=message_text)
+                        except Exception as e:
+                            if 'has_transparency_data' in str(e):
+                                # Convert to RGB and send as photo to avoid transparency error
+                                temp_path = os.path.join(os.getcwd(), f"temp_{int(time.time())}.jpg")
+                                try:
+                                    with Image.open(image_path) as img:
+                                        img.convert('RGB').save(temp_path, 'JPEG', quality=90)
+                                    await client.send_file(username, temp_path, caption=message_text)
+                                    if os.path.exists(temp_path): os.remove(temp_path)
+                                except Exception:
+                                    # Final fallback to document if conversion fails
+                                    await client.send_file(username, image_path, caption=message_text, force_document=True)
+                            else:
+                                raise e
                     else:
                         await client.send_message(username, message_text)
                         
