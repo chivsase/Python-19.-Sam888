@@ -3,4 +3,5 @@ output
 Session
 build
 dist
-.spec
+*.spec
+*.rar

@@ -1,4 +1,4 @@
 pip install --upgrade sip
 pip install --upgrade PyQt5
 
-pyinstaller --onefile --hidden-import=inquirer --hidden-import=readchar --copy-metadata readchar .\Sam888.py --icon "C:\Users\User\OneDrive - Setha\OneDrive - SpringBoard4Education\Documents\Document-python-code\1.Production\Python 19. Sam888\image\sam888_logo.ico"
+pyinstaller --onefile --hidden-import=inquirer --hidden-import=readchar --copy-metadata readchar .\Sam888_prod.py --icon "C:\Users\User\OneDrive - Setha\OneDrive - SpringBoard4Education\Documents\Document-python-code\1.Production\Python 19. Sam888\image\sam888_logo.ico"
